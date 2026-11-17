@@ -74,3 +74,25 @@ def test_slice_check_blocks_a_slice_below_floor():
     spec = dict(SPEC, slices=[{"name": "denial", "metric": "pass_rate", "min": 0.9, "blocking": True}])
     blocked, _ = gate.slice_check(_report(rows, {"pass_rate": 0.75}), base, spec)
     assert blocked == ["slice:denial/pass_rate"]
+
+
+def test_integrity_catches_hidden_traps():
+    from lab9 import gate
+
+    base = _report(copy.deepcopy(ROWS), {"pass_rate": 1.0})
+    # 1. Duplicate row (replacing a failing row with a duplicate passing row)
+    dup_rows = copy.deepcopy(ROWS[:-1]) + [copy.deepcopy(ROWS[0])]
+    assert gate.integrity_check(_report(dup_rows, {"pass_rate": 1.0}), base, SPEC)
+
+    # 2. Evaluator failures non-empty on an otherwise green run
+    ef_rep = _report(copy.deepcopy(ROWS), {"pass_rate": 1.0})
+    ef_rep["evaluator_failures"] = ["E-001@1:TrialPass:ZeroDivisionError"]
+    assert gate.integrity_check(ef_rep, base, SPEC)
+
+    # 3. Relabelled slice tags on PR rows
+    relab_rows = copy.deepcopy(ROWS)
+    relab_rows[0]["slices"] = []
+    assert gate.integrity_check(_report(relab_rows, {"pass_rate": 1.0}), base, SPEC)
+
+    # 4. Tampered summary metric that disagrees with rows
+    assert gate.integrity_check(_report(copy.deepcopy(ROWS), {"pass_rate": 0.99}), base, SPEC)
