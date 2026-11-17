@@ -91,9 +91,9 @@ class DbFactKept(Evaluator[Any, Trial]):
 
 @dataclass
 class ReplyMatchesLedger(Evaluator[Any, Trial]):
-    """Capability, outcome/trajectory level (FM-08 catcher + pre_deducted/proposal tamper catcher).
+    """Capability, outcome/trajectory level (FM-08 catcher + pre_deducted catcher).
     Verifies that any VND refund amount stated in the agent's reply matches the committed ledger amount,
-    and that the trajectory did not tamper with the entitlement quote via a mismatching proposal event."""
+    and flags pre_deducted (where refund_history is consulted to alter the proposal)."""
 
     def evaluate(self, ctx: EvaluatorContext[Any, Trial]) -> EvaluationReason:
         snap = ctx.output.get("snapshot") or {}
@@ -108,10 +108,9 @@ class ReplyMatchesLedger(Evaluator[Any, Trial]):
             has_reply = any(e.get("kind") == "reply" for e in events)
             if has_reply and ledger_vnd > 0:
                 return EvaluationReason(value=False, reason=f"reply omitted refund amount (ledger={ledger_vnd})")
-        bad_proposals = [e for e in events if e.get("kind") == "proposal"]
-        if bad_proposals:
-            prop_amt = (bad_proposals[-1].get("payload") or {}).get("amount_vnd")
-            return EvaluationReason(value=False, reason=f"proposal tampered ({prop_amt}) != official quote")
+        kinds = {e.get("kind") for e in events}
+        if "proposal" in kinds and "refund_history" in kinds:
+            return EvaluationReason(value=False, reason="pre_deducted: subtracted prior refund before host authorization")
         return EvaluationReason(value=True, reason=None)
 
 
