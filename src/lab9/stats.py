@@ -10,6 +10,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 import math
 
+import numpy as np
+import scipy.stats
+
 POS = "FAIL"   # the judge's job is to FIND failures, so FAIL is the positive class
 
 
@@ -70,8 +73,23 @@ def paired_bootstrap(a: Sequence[float], b: Sequence[float], *, n_resamples: int
     """a[i], b[i] = per-item mean over seeds, SAME items, SAME order.
     Return (mean(a)-mean(b), lo, hi) with scipy.stats.bootstrap(paired=True, method="percentile",
     rng=numpy.random.default_rng(rng)). If a == b everywhere return (0.0, 0.0, 0.0)."""
-    # TODO M4
-    raise NotImplementedError
+    arr_a = np.asarray(a, dtype=float)
+    arr_b = np.asarray(b, dtype=float)
+    if arr_a.shape != arr_b.shape or arr_a.size == 0:
+        raise ValueError("a and b must be non-empty sequences of equal length")
+    if np.allclose(arr_a, arr_b, atol=1e-12, rtol=0.0):
+        return (0.0, 0.0, 0.0)
+    diff_mean = float(np.mean(arr_a) - np.mean(arr_b))
+    res = scipy.stats.bootstrap(
+        (arr_a, arr_b),
+        statistic=lambda x, y, axis=-1: np.mean(x, axis=axis) - np.mean(y, axis=axis),
+        n_resamples=n_resamples,
+        paired=True,
+        method="percentile",
+        confidence_level=confidence,
+        rng=np.random.default_rng(rng),
+    )
+    return (diff_mean, float(res.confidence_interval.low), float(res.confidence_interval.high))
 
 
 def pass_at_k(n: int, c: int, k: int) -> float:
